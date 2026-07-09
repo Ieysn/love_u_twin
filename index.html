@@ -117,6 +117,11 @@
   const hintText = document.getElementById('hintText');
   const finalText = document.getElementById('finalText');
 
+  // Mobil cihazlarda səsin yüklənməsini məcburi etmək üçün:
+  if (audio) {
+    audio.load();
+  }
+
   // ---------- Canvas sizing ----------
   let W = 0, H = 0, DPR = 1;
   let clusterX = 0, clusterY = 0, clusterScale = 1;
@@ -234,7 +239,6 @@
       const rr = b.r * 1.35;
       if (dx * dx + dy * dy <= rr * rr) return true;
     }
-    // generous fallback: whole cluster bounding circle
     const dx = px - clusterX, dy = py - clusterY;
     const clusterR = 165 * clusterScale;
     return (dx * dx + dy * dy) <= clusterR * clusterR;
@@ -251,7 +255,7 @@
 
   function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
 
-  // ---------- Explosion particles (radial 360 blast) ----------
+  // ---------- Explosion particles ----------
   let explosionParticles = [];
 
   function spawnExplosion(cx, cy) {
@@ -310,16 +314,13 @@
     ctx.globalAlpha = 1;
   }
 
-  // ---------- Rain particles (pooled, capped for performance, INFINITE loop) ----------
+  // ---------- Rain particles ----------
   const RAIN_POOL_SIZE = 380;
   const rainPool = [];
   for (let i = 0; i < RAIN_POOL_SIZE; i++) {
     rainPool.push({ active: false, x: 0, y: 0, vy: 0, vx: 0, size: 16, alpha: 0.6, color: '#fff', font: 'Poppins', weight: '500' });
   }
 
-  // Randomizes a particle's look/motion. staggered=true spreads the initial
-  // fill across the screen height so the very first shower doesn't look like
-  // a single flat wall of text.
   function resetRainParticle(p, staggered) {
     p.active = true;
     p.x = Math.random() * W;
@@ -334,8 +335,6 @@
     p.weight = font.weight;
   }
 
-  // Activates every pooled particle at once so the shower is instantly heavy
-  // and stays that way forever — nothing ever gets "used up".
   function fillRainPool() {
     for (let i = 0; i < RAIN_POOL_SIZE; i++) resetRainParticle(rainPool[i], true);
   }
@@ -347,9 +346,6 @@
       if (!p.active) continue;
       p.y += p.vy * dtS;
       p.x += p.vx * dtS;
-      // Infinite cascade: once a particle falls off the bottom (or drifts
-      // off the sides), recycle it straight back to the top instead of
-      // deactivating it, so the waterfall never runs dry.
       if (p.y > H + 60 || p.x < -100 || p.x > W + 100) {
         resetRainParticle(p, false);
       }
@@ -371,14 +367,19 @@
   }
 
   // ---------- Timeline ----------
-  const FINAL_MESSAGE_DELAY = 4200; // final message fades in while the shower keeps going
+  const FINAL_MESSAGE_DELAY = 4200;
 
   // ---------- Interaction ----------
   function handlePointerDown(e) {
     if (popped) return;
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    // Mobil toxunuş koordinatlarını dəqiq hesablamaq üçün touch hadisəsini də yoxlayırıq
+    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : (e.clientX || (e.changedTouches && e.changedTouches[0].clientX));
+    const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : (e.clientY || (e.changedTouches && e.changedTouches[0].clientY));
+    
+    if (clientX === undefined || clientY === undefined) return;
+    
     const px = clientX - rect.left;
     const py = clientY - rect.top;
 
@@ -391,12 +392,14 @@
     popped = true;
     popTime = performance.now();
 
-    audio.currentTime = 0;
-    const playPromise = audio.play();
-    if (playPromise && playPromise.catch) playPromise.catch(() => {});
+    // Mobil telefonlarda zəmanətli çalma metodu (əvvəlki kodundakı kimi sadə):
+    if (audio) {
+      audio.play().catch(err => {
+        console.log("Audio oxadıla bilmədi:", err);
+      });
+    }
 
     hintText.classList.add('hidden');
-
     canvas.style.cursor = 'default';
 
     spawnExplosion(clusterX, clusterY);
@@ -406,7 +409,7 @@
   // ---------- Main loop ----------
   function loop(now) {
     rafId = requestAnimationFrame(loop);
-    const dt = Math.min(now - lastTime, 48); // clamp to avoid big jumps on tab-switch
+    const dt = Math.min(now - lastTime, 48);
     lastTime = now;
 
     ctx.clearRect(0, 0, W, H);
@@ -428,47 +431,14 @@
       finalShown = true;
       finalText.classList.add('show');
     }
-    // Note: the rain loop is intentionally infinite and the render loop is
-    // never cancelled after popping — the shower runs forever.
-  }
-
-// ---------- Interaction ----------
-  function handlePointerDown(e) {
-    if (popped) return;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const px = clientX - rect.left;
-    const py = clientY - rect.top;
-
-    if (hitTestBalloons(px, py)) {
-      // Mobil telefonlarda səs məhdudiyyətini qırmaq üçün birbaşa toxunuş anında səsi açırıq:
-      if (audio) {
-        audio.muted = false; // Əgər brauzer səssizə alıbsa, səsi açırıq
-        audio.play().catch(err => {
-          console.log("Mobil audio xətası:", err);
-        });
-      }
-      pop();
-    }
-  }
-
-  function pop() {
-    popped = true;
-    popTime = performance.now();
-
-    hintText.classList.add('hidden');
-    canvas.style.cursor = 'default';
-
-    spawnExplosion(clusterX, clusterY);
-    fillRainPool();
   }
 
   // ---------- Init ----------
   window.addEventListener('resize', resize);
   
-  // Mobil və planşetlərdə klik hadisəsini daha yaxşı tutmaq üçün həm pointerdown, həm də touchend təhlükəsizliyi
-  canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+  // Əvvəlki kodunda işləyən klik sistemini bura tətbiq edirik:
+  canvas.addEventListener('click', handlePointerDown);
+  canvas.addEventListener('touchstart', handlePointerDown, { passive: true });
 
   resize();
   lastTime = performance.now();
