@@ -432,9 +432,18 @@
     // never cancelled after popping — the shower runs forever.
   }
 
-  // ---------- Init ----------
+// ---------- Init ----------
   window.addEventListener('resize', resize);
   canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+
+  // Brauzerin audio məhdudiyyətini keçmək üçün ilk toxunuşda audionu gizlicə aktivləşdiririk
+  window.addEventListener('pointerdown', () => {
+    if (audio && audio.paused && !popped) {
+      audio.play().then(() => {
+        audio.pause(); // Sırf audionu oyandırmaq üçün başladırıq və dərhal saxlayırıq
+      }).catch(e => console.log("Audio aktiv edilə bilmədi:", e));
+    }
+  }, { once: true }); // Bu funksiya cəmi 1 dəfə (ilk klikdə) işləyəcək
 
   resize();
   lastTime = performance.now();
