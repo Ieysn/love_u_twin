@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Nərmin üçün 💜</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --purple-glow: rgba(147, 51, 234, 0.35);
+    --purple-glow-soft: rgba(88, 28, 135, 0.25);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #060005;
+    background-image:
+      radial-gradient(circle at 50% 45%, var(--purple-glow) 0%, transparent 45%),
+      radial-gradient(circle at 50% 100%, var(--purple-glow-soft) 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 50%, #0d0212 0%, #060005 70%, #000000 100%);
+    font-family: 'Poppins', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    cursor: pointer;
+  }
+
+  .overlay-text {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    width: 90%;
+    max-width: 640px;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  #hintText {
+    top: 9%;
+    color: rgba(255, 224, 130, 0.75);
+    font-size: clamp(0.7rem, 2.2vw, 0.85rem);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 500;
+    animation: hintBlink 2.4s ease-in-out infinite;
+    transition: opacity 0.8s ease;
+  }
+
+  #hintText.hidden { opacity: 0; }
+
+  @keyframes hintBlink {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+
+  #finalText {
+    bottom: 8%;
+    color: #ffffff;
+    font-weight: 500;
+    font-size: clamp(1.1rem, 4vw, 1.9rem);
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 20px rgba(216, 180, 254, 0.7), 0 0 50px rgba(147, 51, 234, 0.4);
+    opacity: 0;
+    transform: translateX(-50%) translateY(18px);
+    transition: opacity 2.2s ease, transform 2.2s ease;
+  }
+
+  #finalText.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @media (max-width: 480px) {
+    #hintText { top: 8%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="canvas"></canvas>
+
+  <div id="hintText" class="overlay-text">toxun / vur</div>
+  <div id="finalText" class="overlay-text">KAWAI NEERMIIIIIIIIN</div>
+</div>
+
+<audio id="bgAudio" src="sufjan_track.mp3" preload="auto" loop></audio>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const audio = document.getElementById('bgAudio');
+  const hintText = document.getElementById('hintText');
+  const finalText = document.getElementById('finalText');
+
+  // ---------- Canvas sizing ----------
+  let W = 0, H = 0, DPR = 1;
+  let clusterX = 0, clusterY = 0, clusterScale = 1;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    clusterX = W / 2;
+    clusterY = H * 0.5;
+    clusterScale = Math.max(0.65, Math.min(1.15, W / 900));
+
+    buildBalloons();
+  }
+
+  // ---------- State ----------
+  let popped = false;
+  let popTime = 0;
+  let finalShown = false;
+  let lastTime = performance.now();
+  let rafId = null;
+
+  // ---------- Balloons ----------
+  const balloonOffsets = [
+    { dx: 0,     dy: 0.05, phase: 0.0 },
+    { dx: -1.15, dy: -0.55, phase: 1.1 },
+    { dx: 1.15,  dy: -0.55, phase: 2.3 },
+    { dx: -1.35, dy: 0.75, phase: 3.6 },
+    { dx: 1.35,  dy: 0.75, phase: 0.7 },
+    { dx: -0.15, dy: -1.35, phase: 4.2 },
+    { dx: 0.2,   dy: 1.5,  phase: 2.0 }
+  ];
+  const balloonColors = ['#FFD93D', '#FFC93C', '#FFE066', '#FFCB05', '#FFDA6B', '#FFE58A', '#FFC300'];
+
+  let balloons = [];
+
+  function buildBalloons() {
+    const radius = 46 * clusterScale;
+    const spacing = 78 * clusterScale;
+    balloons = balloonOffsets.map((o, i) => ({
+      baseX: clusterX + o.dx * spacing,
+      baseY: clusterY + o.dy * spacing,
+      x: clusterX + o.dx * spacing,
+      y: clusterY + o.dy * spacing,
+      r: radius * (i === 0 ? 1.08 : 0.92 + Math.random() * 0.12),
+      phase: o.phase,
+      swaySeed: Math.random() * 10,
+      color: balloonColors[i % balloonColors.length]
+    }));
+  }
+
+  function drawBalloon(b, now) {
+    const bob = Math.sin(now * 0.0016 + b.phase) * 9 * clusterScale;
+    const sway = Math.sin(now * 0.0011 + b.swaySeed) * 5 * clusterScale;
+    b.x = b.baseX + sway;
+    b.y = b.baseY + bob;
+
+    const x = b.x, y = b.y, r = b.r;
+
+    // string
+    ctx.beginPath();
+    ctx.moveTo(x, y + r * 0.92);
+    const stringSway = Math.sin(now * 0.0025 + b.phase) * 10 * clusterScale;
+    ctx.quadraticCurveTo(x + stringSway, y + r * 2.2, x + stringSway * 0.4, y + r * 3.4);
+    ctx.strokeStyle = 'rgba(200, 180, 160, 0.35)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // balloon body
+    const grad = ctx.createRadialGradient(
+      x - r * 0.35, y - r * 0.4, r * 0.15,
+      x, y, r * 1.15
+    );
+    grad.addColorStop(0, '#FFF6D0');
+    grad.addColorStop(0.35, b.color);
+    grad.addColorStop(1, '#E0A800');
+
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 0.92, r, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(255, 215, 100, 0.45)';
+    ctx.shadowBlur = 22 * clusterScale;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // knot
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.12, y + r * 0.88);
+    ctx.lineTo(x + r * 0.12, y + r * 0.88);
+    ctx.lineTo(x, y + r * 1.05);
+    ctx.closePath();
+    ctx.fillStyle = '#E0A800';
+    ctx.fill();
+
+    // highlight
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.32, y - r * 0.42, r * 0.24, r * 0.34, -0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fill();
+  }
+
+  function drawBalloons(now) {
+    for (let i = balloons.length - 1; i >= 0; i--) drawBalloon(balloons[i], now);
+  }
+
+  function hitTestBalloons(px, py) {
+    for (const b of balloons) {
+      const dx = px - b.x, dy = py - b.y;
+      const rr = b.r * 1.35;
+      if (dx * dx + dy * dy <= rr * rr) return true;
+    }
+    // generous fallback: whole cluster bounding circle
+    const dx = px - clusterX, dy = py - clusterY;
+    const clusterR = 165 * clusterScale;
+    return (dx * dx + dy * dy) <= clusterR * clusterR;
+  }
+
+  // ---------- Particle text / colors ----------
+  const LOVE_TEXT = 'I love you';
+  const PALETTE = ['#ffffff', '#e9d5ff', '#d8b4fe', '#ffd76a', '#ff9ecf', '#c4b5fd'];
+  const FONTS = [
+    { family: '"Dancing Script", cursive', weight: '700' },
+    { family: '"Great Vibes", cursive', weight: '400' },
+    { family: '"Poppins", sans-serif', weight: '600' }
+  ];
+
+  function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+
+  // ---------- Explosion particles (radial 360 blast) ----------
+  let explosionParticles = [];
+
+  function spawnExplosion(cx, cy) {
+    const count = 150;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+      const speed = 170 + Math.random() * 320;
+      const font = pick(FONTS);
+      explosionParticles.push({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        rot: angle,
+        rotSpeed: (Math.random() - 0.5) * 2.4,
+        size: 15 + Math.random() * 20,
+        life: 900 + Math.random() * 500,
+        age: 0,
+        color: pick(PALETTE),
+        font: font.family,
+        weight: font.weight
+      });
+    }
+  }
+
+  function updateExplosion(dt) {
+    const gravity = 260;
+    const next = [];
+    for (const p of explosionParticles) {
+      p.age += dt;
+      if (p.age >= p.life) continue;
+      const t = p.age / p.life;
+      p.vy += gravity * (dt / 1000);
+      p.vx *= 0.985;
+      p.x += p.vx * (dt / 1000);
+      p.y += p.vy * (dt / 1000);
+      p.rot += p.rotSpeed * (dt / 1000);
+      p.alpha = 1 - t;
+      next.push(p);
+    }
+    explosionParticles = next;
+  }
+
+  function drawExplosion() {
+    for (const p of explosionParticles) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.max(p.alpha, 0);
+      ctx.fillStyle = p.color;
+      ctx.font = `${p.weight} ${p.size}px ${p.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(LOVE_TEXT, 0, 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Rain particles (pooled, capped for performance, INFINITE loop) ----------
+  const RAIN_POOL_SIZE = 380;
+  const rainPool = [];
+  for (let i = 0; i < RAIN_POOL_SIZE; i++) {
+    rainPool.push({ active: false, x: 0, y: 0, vy: 0, vx: 0, size: 16, alpha: 0.6, color: '#fff', font: 'Poppins', weight: '500' });
+  }
+
+  // Randomizes a particle's look/motion. staggered=true spreads the initial
+  // fill across the screen height so the very first shower doesn't look like
+  // a single flat wall of text.
+  function resetRainParticle(p, staggered) {
+    p.active = true;
+    p.x = Math.random() * W;
+    p.y = staggered ? Math.random() * (H + 200) - 200 : (-30 - Math.random() * 140);
+    p.vy = 460 + Math.random() * 420;
+    p.vx = (Math.random() - 0.5) * 45;
+    p.size = 14 + Math.random() * 26;
+    p.alpha = 0.35 + Math.random() * 0.6;
+    p.color = pick(PALETTE);
+    const font = pick(FONTS);
+    p.font = font.family;
+    p.weight = font.weight;
+  }
+
+  // Activates every pooled particle at once so the shower is instantly heavy
+  // and stays that way forever — nothing ever gets "used up".
+  function fillRainPool() {
+    for (let i = 0; i < RAIN_POOL_SIZE; i++) resetRainParticle(rainPool[i], true);
+  }
+
+  function updateRain(dt) {
+    const dtS = dt / 1000;
+    for (let i = 0; i < RAIN_POOL_SIZE; i++) {
+      const p = rainPool[i];
+      if (!p.active) continue;
+      p.y += p.vy * dtS;
+      p.x += p.vx * dtS;
+      // Infinite cascade: once a particle falls off the bottom (or drifts
+      // off the sides), recycle it straight back to the top instead of
+      // deactivating it, so the waterfall never runs dry.
+      if (p.y > H + 60 || p.x < -100 || p.x > W + 100) {
+        resetRainParticle(p, false);
+      }
+    }
+  }
+
+  function drawRain() {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    for (let i = 0; i < RAIN_POOL_SIZE; i++) {
+      const p = rainPool[i];
+      if (!p.active) continue;
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.font = `${p.weight} ${p.size}px ${p.font}`;
+      ctx.fillText(LOVE_TEXT, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Timeline ----------
+  const FINAL_MESSAGE_DELAY = 4200; // final message fades in while the shower keeps going
+
+  // ---------- Interaction ----------
+  function handlePointerDown(e) {
+    if (popped) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+
+    if (hitTestBalloons(px, py)) {
+      pop();
+    }
+  }
+
+  function pop() {
+    popped = true;
+    popTime = performance.now();
+
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise && playPromise.catch) playPromise.catch(() => {});
+
+    hintText.classList.add('hidden');
+
+    canvas.style.cursor = 'default';
+
+    spawnExplosion(clusterX, clusterY);
+    fillRainPool();
+  }
+
+  // ---------- Main loop ----------
+  function loop(now) {
+    rafId = requestAnimationFrame(loop);
+    const dt = Math.min(now - lastTime, 48); // clamp to avoid big jumps on tab-switch
+    lastTime = now;
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (!popped) {
+      drawBalloons(now);
+      return;
+    }
+
+    const elapsed = now - popTime;
+
+    updateExplosion(dt);
+    updateRain(dt);
+
+    drawRain();
+    drawExplosion();
+
+    if (!finalShown && elapsed >= FINAL_MESSAGE_DELAY) {
+      finalShown = true;
+      finalText.classList.add('show');
+    }
+    // Note: the rain loop is intentionally infinite and the render loop is
+    // never cancelled after popping — the shower runs forever.
+  }
+
+  // ---------- Init ----------
+  window.addEventListener('resize', resize);
+  canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+
+  resize();
+  lastTime = performance.now();
+  rafId = requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
