@@ -432,18 +432,43 @@
     // never cancelled after popping — the shower runs forever.
   }
 
-// ---------- Init ----------
-  window.addEventListener('resize', resize);
-  canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+// ---------- Interaction ----------
+  function handlePointerDown(e) {
+    if (popped) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
 
-  // Brauzerin audio məhdudiyyətini keçmək üçün ilk toxunuşda audionu gizlicə aktivləşdiririk
-  window.addEventListener('pointerdown', () => {
-    if (audio && audio.paused && !popped) {
-      audio.play().then(() => {
-        audio.pause(); // Sırf audionu oyandırmaq üçün başladırıq və dərhal saxlayırıq
-      }).catch(e => console.log("Audio aktiv edilə bilmədi:", e));
+    if (hitTestBalloons(px, py)) {
+      // Mobil telefonlarda səs məhdudiyyətini qırmaq üçün birbaşa toxunuş anında səsi açırıq:
+      if (audio) {
+        audio.muted = false; // Əgər brauzer səssizə alıbsa, səsi açırıq
+        audio.play().catch(err => {
+          console.log("Mobil audio xətası:", err);
+        });
+      }
+      pop();
     }
-  }, { once: true }); // Bu funksiya cəmi 1 dəfə (ilk klikdə) işləyəcək
+  }
+
+  function pop() {
+    popped = true;
+    popTime = performance.now();
+
+    hintText.classList.add('hidden');
+    canvas.style.cursor = 'default';
+
+    spawnExplosion(clusterX, clusterY);
+    fillRainPool();
+  }
+
+  // ---------- Init ----------
+  window.addEventListener('resize', resize);
+  
+  // Mobil və planşetlərdə klik hadisəsini daha yaxşı tutmaq üçün həm pointerdown, həm də touchend təhlükəsizliyi
+  canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
 
   resize();
   lastTime = performance.now();
