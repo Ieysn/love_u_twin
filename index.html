@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CurlyNerminSOOOCUTE💜</title>
+<title>Nərmin üçün 💜</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght=600;700&family=Great+Vibes&family=Poppins:ital,wght=0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 
 <style>
   :root {
@@ -101,11 +101,9 @@
 <div id="stage">
   <canvas id="canvas"></canvas>
 
-  <div id="hintText" class="overlay-text">toxun </div>
+  <div id="hintText" class="overlay-text">toxun / vur</div>
   <div id="finalText" class="overlay-text">KAWAI NEERMIIIIIIIIN</div>
 </div>
-
-<audio id="bgAudio" src="Futile Devices (Doveman Remix)  Call Me By Your Name (Original Motion Picture Soundtrack).mp3" preload="auto" loop></audio>
 
 <script>
 (() => {
@@ -113,13 +111,14 @@
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-  const audio = document.getElementById('bgAudio');
   const hintText = document.getElementById('hintText');
   const finalText = document.getElementById('finalText');
 
-  // Mobil cihazlarda səsin yüklənməsini məcburi etmək üçün:
-  if (audio) {
-    audio.load();
+  // HTML <audio> teqini silib, eynilə sənin işləyən kodundakı kimi New Audio obyekti yaradırıq:
+  const bgMusic = new Audio('Futile Devices (Doveman Remix)  Call Me By Your Name (Original Motion Picture Soundtrack).mp3');
+  if (bgMusic) {
+    bgMusic.loop = true;
+    bgMusic.preload = 'auto';
   }
 
   // ---------- Canvas sizing ----------
@@ -372,14 +371,15 @@
   // ---------- Interaction ----------
   function handlePointerDown(e) {
     if (popped) return;
+    
+    // Eynilə sənin əvvəlki kodundakı kimi, musiqini birbaşa istifadəçi toxunuşu ilə başladırıq:
+    if (bgMusic) {
+      bgMusic.play().catch(err => console.log("Musiqi oxadıla bilmədi:", err));
+    }
+
     const rect = canvas.getBoundingClientRect();
-    
-    // Mobil toxunuş koordinatlarını dəqiq hesablamaq üçün touch hadisəsini də yoxlayırıq
-    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : (e.clientX || (e.changedTouches && e.changedTouches[0].clientX));
-    const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : (e.clientY || (e.changedTouches && e.changedTouches[0].clientY));
-    
-    if (clientX === undefined || clientY === undefined) return;
-    
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const px = clientX - rect.left;
     const py = clientY - rect.top;
 
@@ -391,13 +391,6 @@
   function pop() {
     popped = true;
     popTime = performance.now();
-
-    // Mobil telefonlarda zəmanətli çalma metodu (əvvəlki kodundakı kimi sadə):
-    if (audio) {
-      audio.play().catch(err => {
-        console.log("Audio oxadıla bilmədi:", err);
-      });
-    }
 
     hintText.classList.add('hidden');
     canvas.style.cursor = 'default';
@@ -436,9 +429,8 @@
   // ---------- Init ----------
   window.addEventListener('resize', resize);
   
-  // Əvvəlki kodunda işləyən klik sistemini bura tətbiq edirik:
+  // Əvvəlki kodunda işləyən rəsmi 'click' və toxunma hadisəsini bura bağlayırıq:
   canvas.addEventListener('click', handlePointerDown);
-  canvas.addEventListener('touchstart', handlePointerDown, { passive: true });
 
   resize();
   lastTime = performance.now();
